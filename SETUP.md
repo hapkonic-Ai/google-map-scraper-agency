@@ -12,6 +12,7 @@ Install these first (one-time):
 | Tool | Why | Get it |
 |---|---|---|
 | **Docker Desktop** | runs the scraper container | https://www.docker.com/products/docker-desktop |
+| **Python 3.8+** | runs `scrape.py`, `prospect.py` and the web UI (stdlib only, no pip installs) | https://www.python.org/downloads |
 | **Claude Code** *(optional but recommended)* | lets Claude drive the scraper for you | https://claude.com/claude-code |
 | **git** *(optional)* | only if you'll push this to GitHub | https://git-scm.com |
 
@@ -24,8 +25,8 @@ docker ps               # should NOT error (means the daemon is up)
 > **Platform notes:**
 > - **Apple Silicon (M1/M2/M3):** the scraper image is `linux/amd64` and runs under emulation. If the
 >   container won't start, uncomment the `platform: linux/amd64` line in `docker-compose.yml`.
-> - **Windows:** use `scripts/scrape.py` (run with `py` or `python3`). The bash script `scrape.sh` needs
->   **WSL2** or **Git Bash**.
+> - **Windows:** use the Python scripts (`scrape.py`, `prospect.py`, `serve.py`) — run with `py` or
+>   `python3`. The bash script `scrape.sh` needs **WSL2** or **Git Bash**.
 
 ---
 
@@ -57,9 +58,11 @@ docker ps | grep gmaps-scraper          # should show it "Up"
 curl http://localhost:8080/api/v1/jobs  # should print [] (empty list) or existing jobs
 ```
 
-You can also open the built-in UI and API docs in a browser:
-- Web UI: **http://localhost:8080**
+You can also open the scraper's own built-in UI and API docs in a browser:
+- Scraper UI: **http://localhost:8080**
 - OpenAPI docs: **http://localhost:8080/api/docs**
+
+(The kit's friendlier prospecting UI is separate — see §4.)
 
 ✅ If `curl` returns a JSON array, the system is live.
 
@@ -100,9 +103,35 @@ python3 scripts/scrape.py "cafes in Austin TX" --city "Austin, TX" --depth 5
 python3 scripts/scrape.py --keywords-file examples/queries.example.txt --city "Denver, CO"
 ```
 
+**Qualify leads as client prospects** (no-website businesses + ERP/billing candidates, scored and
+sorted best-first):
+```bash
+python3 scripts/scrape.py "restaurants in Vellore" --city "Vellore, TN" --depth 5 --prospects
+
+# …or re-score any CSV you've already scraped:
+python3 scripts/prospect.py results-abc123.csv --only-prospects
+```
+See README → *Client prospecting* for the scoring rules and column meanings.
+
 ---
 
-## 4. Use it with Claude (the autopilot way) 🤖
+## 4. Optional: the web UI (point-and-click)
+
+Prefer buttons over the terminal? Run the local UI (stdlib only, localhost-only):
+
+```bash
+python3 scripts/serve.py     # then open http://localhost:8081
+```
+
+From the UI you can: configure and run scrapes (keywords, city auto-geocode, depth, email/socials/
+prospects toggles), watch the job status live, and browse every saved `results-*.csv` in a filterable
+table with prospect badges (HOT/WARM, "needs website" highlighting). It talks to the same scraper API
+and saves files to the same place as the scripts. Stop it with `Ctrl+C`. If port 8081 is taken, start
+it on another: `UI_PORT=9000 python3 scripts/serve.py`.
+
+---
+
+## 5. Use it with Claude (the autopilot way) 🤖
 
 This is the point of the kit. Two parts make it work:
 
@@ -148,7 +177,7 @@ Inside Claude Code you can also use these commands (type `/` to see them):
 
 ---
 
-## 5. Stop / clean up
+## 6. Stop / clean up
 
 ```bash
 docker compose stop      # pause (keeps data + image)
@@ -163,7 +192,7 @@ curl -X DELETE http://localhost:8080/api/v1/jobs/<job-id>
 
 ---
 
-## 6. Troubleshooting
+## 7. Troubleshooting
 
 | Symptom | Fix |
 |---|---|
@@ -172,11 +201,12 @@ curl -X DELETE http://localhost:8080/api/v1/jobs/<job-id>
 | `422 missing geo coordinates` | Job body needs `lat` and `lon` as **strings**, e.g. `"30.2672"`. |
 | Job stuck `working` forever | Lower `depth`, or the IP is being throttled by Google — wait, or add proxies (see skill). |
 | Empty CSV | Keyword too narrow or wrong geo — widen `radius` or fix `lat`/`lon`. |
+| `Address already in use` on :8081 | Something else occupies the UI port — `UI_PORT=9000 python3 scripts/serve.py`. |
 | Docker pull is slow | Normal on first run; it caches after that. |
 
 ---
 
-## 7. Best practices & safety (summary)
+## 8. Best practices & safety (summary)
 
 The full rules live in the skill, but the essentials:
 - **Always** send `max_time` (seconds) and `lat`/`lon` (strings).

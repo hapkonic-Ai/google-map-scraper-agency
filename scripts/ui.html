@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Google Maps Scraper — Prospect UI</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #fff; --ink: #1f2430; --muted: #6b7280; --line: #e2e5ea;
+    --accent: #2563eb; --accent-dark: #1e40af; --ok: #16a34a; --bad: #dc2626;
+    --hot: #dc2626; --warm: #d97706; --cool: #2563eb; --low: #6b7280;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         background: var(--bg); color: var(--ink); }
+  header { background: #111827; color: #fff; padding: 12px 20px; display: flex;
+           align-items: center; gap: 10px; flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--bad); display: inline-block; }
+  .dot.up { background: var(--ok); }
+  #healthText { color: #9ca3af; font-size: 12px; }
+  nav { display: flex; gap: 4px; padding: 10px 20px 0; }
+  nav button { border: 1px solid var(--line); border-bottom: none; background: #eceff3;
+               padding: 8px 18px; border-radius: 8px 8px 0 0; cursor: pointer; color: var(--muted);
+               font-weight: 600; }
+  nav button.active { background: var(--card); color: var(--accent); }
+  main { padding: 20px; max-width: 1200px; margin: 0 auto; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+          padding: 18px; margin-bottom: 18px; }
+  h2 { margin: 0 0 14px; font-size: 15px; }
+  label { display: block; font-size: 12px; font-weight: 600; color: var(--muted);
+          margin: 10px 0 4px; text-transform: uppercase; letter-spacing: .03em; }
+  input[type=text], input[type=number], textarea, select {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px;
+    font: inherit; background: #fff; }
+  textarea { min-height: 70px; resize: vertical; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 140px; }
+  .checks { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 12px; }
+  .checks label { display: flex; align-items: center; gap: 6px; text-transform: none;
+                  font-size: 13px; color: var(--ink); font-weight: 500; margin: 0; }
+  .btn { background: var(--accent); color: #fff; border: none; padding: 9px 20px;
+         border-radius: 7px; font: inherit; font-weight: 600; cursor: pointer; }
+  .btn:hover { background: var(--accent-dark); }
+  .btn.secondary { background: #e5e7eb; color: var(--ink); }
+  .btn.small { padding: 4px 10px; font-size: 12px; }
+  .muted { color: var(--muted); font-size: 12px; }
+  #progress { margin-top: 14px; padding: 10px 12px; border-radius: 7px; background: #eef2ff;
+              font-size: 13px; display: none; white-space: pre-wrap; }
+  #progress.err { background: #fef2f2; color: var(--bad); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line);
+           vertical-align: top; }
+  th { position: sticky; top: 0; background: #f9fafb; font-size: 11px; text-transform: uppercase;
+       color: var(--muted); letter-spacing: .03em; z-index: 1; }
+  tr.no-web { background: #fff7f7; }
+  .table-wrap { max-height: 65vh; overflow: auto; border: 1px solid var(--line);
+                border-radius: 8px; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px;
+           font-weight: 700; color: #fff; }
+  .pri-hot { background: var(--hot); } .pri-warm { background: var(--warm); }
+  .pri-cool { background: var(--cool); } .pri-low { background: var(--low); }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px;
+          font-weight: 600; }
+  .pill.no { background: #fee2e2; color: var(--bad); }
+  .pill.yes { background: #dcfce7; color: var(--ok); }
+  .filecard { display: flex; align-items: center; gap: 14px; padding: 10px 4px;
+              border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .filecard .name { font-weight: 600; font-family: ui-monospace, Consolas, monospace;
+                    font-size: 13px; }
+  .spacer { flex: 1; }
+  #filterRow { display: none; margin-bottom: 10px; }
+  .tabpage { display: none; }
+  .tabpage.active { display: block; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="dot" id="dot"></span>
+  <h1>Google Maps Scraper — Prospect UI</h1>
+  <span id="healthText">checking scraper…</span>
+  <span class="spacer"></span>
+  <span class="muted">localhost only</span>
+</header>
+
+<nav>
+  <button class="active" data-tab="search">New search</button>
+  <button data-tab="jobs">Jobs</button>
+  <button data-tab="results">Saved results</button>
+</nav>
+
+<main>
+  <!-- ── New search ─────────────────────────────────────────── -->
+  <section id="tab-search" class="tabpage active">
+    <div class="card">
+      <h2>Run a scrape</h2>
+      <form id="searchForm">
+        <label for="keywords">Keywords — one per line, location baked in</label>
+        <textarea id="keywords" placeholder="cafes in Vellore&#10;bakeries in Vellore"></textarea>
+
+        <div class="row">
+          <div>
+            <label for="city">City / place (auto-geocode)</label>
+            <div style="display:flex;gap:8px">
+              <input type="text" id="city" placeholder="Vellore, TN" style="flex:1">
+              <button type="button" class="btn secondary" id="geocodeBtn">Resolve</button>
+            </div>
+          </div>
+          <div><label for="lat">Latitude</label><input type="text" id="lat" placeholder="12.9165"></div>
+          <div><label for="lon">Longitude</label><input type="text" id="lon" placeholder="79.1325"></div>
+        </div>
+
+        <div class="row">
+          <div><label for="depth">Depth (results per keyword — start low)</label>
+            <input type="number" id="depth" value="5" min="1" max="50"></div>
+          <div><label for="max_time">Max time (seconds)</label>
+            <input type="number" id="max_time" value="600" min="30"></div>
+          <div><label for="radius">Radius (meters)</label>
+            <input type="number" id="radius" value="10000" step="1000"></div>
+        </div>
+
+        <div class="checks">
+          <label><input type="checkbox" id="email" checked> Email extraction (slower, emails are the #1 lead field)</label>
+          <label><input type="checkbox" id="prospects" checked> Prospect scoring (no-website + ERP flags)</label>
+          <label><input type="checkbox" id="socials"> Socials (Instagram / Facebook / LinkedIn — slower)</label>
+        </div>
+
+        <div style="margin-top:16px">
+          <button class="btn" type="submit">Run scrape</button>
+          <span class="muted" style="margin-left:10px" id="geoMsg"></span>
+        </div>
+      </form>
+      <div id="progress"></div>
+    </div>
+  </section>
+
+  <!-- ── Jobs ───────────────────────────────────────────────── -->
+  <section id="tab-jobs" class="tabpage">
+    <div class="card">
+      <h2>Jobs on the scraper <button class="btn secondary small" onclick="loadJobs()">Refresh</button></h2>
+      <div id="jobsWrap" class="muted">Loading…</div>
+    </div>
+  </section>
+
+  <!-- ── Saved results ──────────────────────────────────────── -->
+  <section id="tab-results" class="tabpage">
+    <div class="card">
+      <h2>Saved result files <button class="btn secondary small" onclick="loadResults()">Refresh</button></h2>
+      <div id="filesWrap" class="muted">Loading…</div>
+    </div>
+    <div class="card" id="viewerCard" style="display:none">
+      <h2 id="viewerTitle"></h2>
+      <div id="filterRow">
+        <input type="text" id="filter" placeholder="Filter rows… (matches any column)">
+      </div>
+      <div id="tableWrap" class="table-wrap"></div>
+      <p class="muted" id="viewerNote"></p>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, opts);
+  const t = await r.text();
+  let d; try { d = JSON.parse(t); } catch { d = t; }
+  if (!r.ok) throw new Error((d && d.error) || ('HTTP ' + r.status));
+  return d;
+}
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ── tabs ── */
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('active', x === b));
+  document.querySelectorAll('.tabpage').forEach(s => s.classList.toggle('active', s.id === 'tab-' + b.dataset.tab));
+  if (b.dataset.tab === 'jobs') loadJobs();
+  if (b.dataset.tab === 'results') loadResults();
+});
+
+/* ── health ── */
+async function health() {
+  try {
+    const h = await api('/api/health');
+    $('dot').className = 'dot' + (h.scraper ? ' up' : '');
+    $('healthText').textContent = h.scraper ? `scraper up — ${h.jobs} job(s) stored` : 'scraper DOWN — run: docker compose up -d';
+  } catch {
+    $('dot').className = 'dot';
+    $('healthText').textContent = 'UI server unreachable';
+  }
+}
+health(); setInterval(health, 15000);
+
+/* ── geocode ── */
+$('geocodeBtn').onclick = async () => {
+  const q = $('city').value.trim();
+  if (!q) return;
+  $('geoMsg').textContent = 'resolving…';
+  try {
+    const r = await api('/api/geocode?q=' + encodeURIComponent(q));
+    if (r.error) throw new Error(r.error);
+    $('lat').value = r.lat; $('lon').value = r.lon;
+    $('geoMsg').textContent = `→ ${r.lat}, ${r.lon}`;
+  } catch (e) { $('geoMsg').textContent = '✗ ' + e.message; }
+};
+
+/* ── run scrape ── */
+function progress(msg, isErr) {
+  const p = $('progress');
+  p.style.display = 'block';
+  p.className = isErr ? 'err' : '';
+  p.textContent = msg;
+}
+
+$('searchForm').onsubmit = async e => {
+  e.preventDefault();
+  const keywords = $('keywords').value.split('\n').map(s => s.trim()).filter(Boolean);
+  if (!keywords.length) return progress('Add at least one keyword.', true);
+  const cfg = {
+    keywords,
+    lat: $('lat').value.trim(), lon: $('lon').value.trim(),
+    depth: +$('depth').value || 5,
+    max_time: +$('max_time').value || 600,
+    radius: +$('radius').value || 10000,
+    email: $('email').checked,
+  };
+  const opts = { prospects: $('prospects').checked, socials: $('socials').checked };
+  if (opts.socials && !confirm('Socials fetching visits every business website and can take a while. Continue?')) return;
+  try {
+    progress('Creating job…');
+    const job = await api('/api/jobs', { method: 'POST', body: JSON.stringify(cfg) });
+    const id = job.id || job.ID;
+    if (!id) throw new Error('no job id returned: ' + JSON.stringify(job).slice(0, 200));
+    progress(`Job ${id.slice(0, 8)} created — polling…`);
+    await poll(id, opts);
+  } catch (err) { progress('✗ ' + err.message, true); }
+  health();
+};
+
+async function poll(id, opts) {
+  for (let i = 1; i <= 150; i++) {
+    await new Promise(r => setTimeout(r, 4000));
+    let j;
+    try { j = await api('/api/jobs/' + id); } catch (e) { progress(`poll error: ${e.message} — retrying…`); continue; }
+    const st = j.Status || j.status;
+    progress(`Job ${id.slice(0, 8)} — status: ${st} (check ${i})`);
+    if (st === 'ok') return finish(id, opts);
+    if (st === 'failed') return progress('✗ Job FAILED. You may be rate-limited — wait, lower depth, or add proxies.', true);
+  }
+  progress('✗ Timed out waiting for the job.', true);
+}
+
+async function finish(id, opts) {
+  progress('Job done — downloading & processing results…');
+  try {
+    const r = await api('/api/finalize', { method: 'POST', body: JSON.stringify({ job_id: id, ...opts }) });
+    if (r.error) return progress('✗ ' + r.error, true);
+    let msg = `✓ Done — ${r.total} businesses saved to ${r.file}`;
+    if (opts.prospects) msg += `  •  ${r.needs_website} need a website  •  ${r.hot} HOT prospects`;
+    progress(msg);
+    loadResults();
+  } catch (e) { progress('✗ ' + e.message, true); }
+}
+
+/* ── jobs tab ── */
+async function loadJobs() {
+  const w = $('jobsWrap');
+  w.textContent = 'Loading…';
+  try {
+    const jobs = await api('/api/jobs');
+    if (jobs.scraper_down) { w.innerHTML = '<span style="color:var(--bad)">Scraper is DOWN.</span> ' + esc(jobs.detail); return; }
+    if (!Array.isArray(jobs) || !jobs.length) { w.textContent = 'No jobs yet.'; return; }
+    const keys = ['id', 'ID', 'name', 'Name', 'Status', 'status'].filter(k => k in jobs[0]);
+    const extra = Object.keys(jobs[0]).filter(k => !keys.includes(k)).slice(0, 3);
+    const cols = [...new Set([...keys, ...extra])];
+    w.innerHTML = '<div class="table-wrap"><table><thead><tr>' +
+      cols.map(c => `<th>${esc(c)}</th>`).join('') +
+      '</tr></thead><tbody>' + jobs.map(j => '<tr>' + cols.map(c => {
+        let v = esc(j[c]);
+        if ((c === 'Status' || c === 'status')) {
+          const cls = j[c] === 'ok' ? 'yes' : (j[c] === 'failed' ? 'no' : '');
+          v = `<span class="pill ${cls}">${v}</span>`;
+        }
+        return `<td>${v}</td>`;
+      }).join('') + '</tr>').join('') + '</tbody></table></div>';
+  } catch (e) { w.textContent = '✗ ' + e.message; }
+}
+
+/* ── results tab ── */
+let currentRows = [], currentFields = [];
+
+async function loadResults() {
+  const w = $('filesWrap');
+  w.textContent = 'Loading…';
+  try {
+    const files = await api('/api/results');
+    if (!files.length) { w.textContent = 'No results yet — run a search first.'; return; }
+    w.innerHTML = files.map(f => `
+      <div class="filecard">
+        <span class="name">${esc(f.name)}</span>
+        <span class="muted">${f.rows} rows</span>
+        <span class="muted">${new Date(f.mtime * 1000).toLocaleString()}</span>
+        <span class="spacer"></span>
+        <button class="btn small" onclick="viewResult('${esc(f.name)}')">View</button>
+        <a class="btn small secondary" style="text-decoration:none" href="/api/results?download=1&name=${encodeURIComponent(f.name)}">Download</a>
+      </div>`).join('');
+  } catch (e) { w.textContent = '✗ ' + e.message; }
+}
+
+async function viewResult(name) {
+  try {
+    const d = await api('/api/results?name=' + encodeURIComponent(name));
+    currentRows = d.rows; currentFields = d.fields;
+    $('viewerCard').style.display = 'block';
+    $('viewerTitle').textContent = name;
+    $('filterRow').style.display = 'block';
+    $('filter').value = '';
+    $('viewerNote').textContent = d.total > d.rows.length
+      ? `Showing first ${d.rows.length} of ${d.total} rows — use the filter or download the CSV for all.`
+      : `${d.total} rows.`;
+    renderTable(currentRows);
+    $('viewerCard').scrollIntoView({ behavior: 'smooth' });
+  } catch (e) { alert(e.message); }
+}
+
+function cellHtml(field, row) {
+  const v = row[field] ?? '';
+  if (field === 'priority' && v) return `<span class="badge pri-${esc(v)}">${esc(v)}</span>`;
+  if ((field === 'needs_website' || field === 'needs_erp' || field === 'has_website') && v)
+    return `<span class="pill ${v === 'yes' ? 'no' : 'yes'}">${v === 'yes' ? 'YES' : 'no'}</span>`;
+  if (field === 'website' && v && /^https?:/.test(v)) return `<a href="${esc(v)}" target="_blank" rel="noopener">${esc(v)}</a>`;
+  return esc(v);
+}
+
+function renderTable(rows) {
+  $('tableWrap').innerHTML = '<table><thead><tr>' +
+    currentFields.map(f => `<th>${esc(f)}</th>`).join('') +
+    '</tr></thead><tbody>' +
+    rows.map(r =>
+      `<tr class="${r.needs_website === 'yes' ? 'no-web' : ''}">` +
+      currentFields.map(f => `<td>${cellHtml(f, r)}</td>`).join('') +
+      '</tr>').join('') +
+    '</tbody></table>';
+}
+
+$('filter').oninput = () => {
+  const q = $('filter').value.trim().toLowerCase();
+  if (!q) return renderTable(currentRows);
+  renderTable(currentRows.filter(r => currentFields.some(f => String(r[f] ?? '').toLowerCase().includes(q))));
+};
+
+loadResults();
+</script>
+</body>
+</html>

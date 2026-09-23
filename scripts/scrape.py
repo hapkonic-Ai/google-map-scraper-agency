@@ -18,6 +18,12 @@ Notes:
 import argparse, csv, io, json, os, re, sys, time, urllib.request, urllib.parse, urllib.error
 from concurrent.futures import ThreadPoolExecutor
 
+import prospect  # sibling module: client-qualification scoring (website + ERP need)
+
+# Windows consoles default to cp1252 and crash on symbols like ▶/✓; force UTF-8 output.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 BASE = os.environ.get("SCRAPER_BASE_URL", "http://localhost:8080")
 KEY = os.environ.get("SCRAPER_API_KEY", "")
 # Money-useful LEAD fields only — what you actually use to contact/qualify a lead.
@@ -144,6 +150,12 @@ def main():
     ap.add_argument("--fields", help="comma-separated columns to keep (overrides the default lead set)")
     ap.add_argument("--socials", action="store_true",
                     help="also find Instagram/Facebook/LinkedIn from each website (0 LLM tokens; slower)")
+    ap.add_argument("--prospects", action="store_true",
+                    help="score each lead as a client prospect: flags no-website businesses "
+                         "(website-services opportunity) and ERP/billing candidates by category "
+                         "+ review volume. Adds columns and sorts best-first.")
+    ap.add_argument("--erp-categories", help="comma-separated terms to REPLACE the default "
+                    "ERP category list, e.g. \"restaurant,pharmacy,gym\" (use with --prospects)")
     a = ap.parse_args()
 
     keywords = collect_keywords(a)
@@ -227,6 +239,17 @@ def main():
         found = sum(1 for r in results if r.get("instagram") or r.get("facebook") or r.get("linkedin"))
         print(f"  socials found for {found}/{len(results)} businesses")
 
+    if a.prospects:
+        strong = [t.strip().lower() for t in a.erp_categories.split(",") if t.strip()] \
+            if a.erp_categories else None
+        prospect.qualify(results, strong=strong)  # sorts best-first, adds prospect columns
+        fields = fields + [c for c in prospect.PROSPECT_FIELDS if c not in fields]
+        no_web = sum(1 for r in results if r["needs_website"] == "yes")
+        erp = sum(1 for r in results if r["needs_erp"] == "yes")
+        hot = sum(1 for r in results if r["priority"] == "hot")
+        print(f"▶ Prospects: {no_web} need a website | {erp} match ERP categories | {hot} HOT")
+        print("  (scored by: ERP category match + review volume + no website; sorted best-first)")
+
     # Default output is a CSV file (opens in Excel / Google Sheets). Use --json (or a .json --out path) for JSON.
     as_json = a.json or (a.out and a.out.lower().endswith(".json"))
     out = a.out or f"results-{job_id[:8]}.{'json' if as_json else 'csv'}"
@@ -234,13 +257,20 @@ def main():
         with open(out, "w") as f:
             json.dump(results, f, indent=2, ensure_ascii=False)
     else:
-        with open(out, "w", newline="") as f:
+        with open(out, "w", newline="", encoding="utf-8-sig") as f:
             w = csv.DictWriter(f, fieldnames=fields)
             w.writeheader()
             w.writerows(results)
     print(f"  saved → {out}")
     for r in results[:5]:
-        tail = f" | IG:{r.get('instagram','') or '—'}" if a.socials else f" | {r.get('website','')}"
+        if a.prospects:
+            tail = f" | score:{r['priority_score']} {r['priority']}"
+            if r["needs_website"] == "yes":
+                tail += " | NO WEBSITE"
+        elif a.socials:
+            tail = f" | IG:{r.get('instagram','') or '—'}"
+        else:
+            tail = f" | {r.get('website','')}"
         print(f"  • {r.get('title','')} | {r.get('phone','')} | {r.get('emails','')}{tail}")
 
 

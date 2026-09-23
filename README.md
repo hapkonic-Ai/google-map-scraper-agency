@@ -33,6 +33,8 @@ ready-to-run scripts, and a **Claude skill** so Claude knows exactly how to use 
 
 - ✅ **Google Maps business listings** → a clean **lead list** by default: `name, phone, email, website, category, address, rating, review count`. The scraper captures ~34 raw fields, but the kit **strips the noise** (geo coordinates, IDs, hours, images, review blobs) so you only get data you can actually use for outreach. Want everything? `scrape.py --full`.
 - ➕ **Optional socials** (`--socials`): also pulls each business's **Instagram / Facebook / LinkedIn** by scanning its website. **Token cost: 0** — it runs in code (HTTP + regex), no AI. It only adds ~40–50 tokens *per business* if you later load the rows into an AI chat (≈+2k for 50 leads; nothing if you keep the file on disk). It's slower (one fetch per site) and coverage is partial (only businesses that link socials on their site).
+- 🎯 **Prospect qualification** (`--prospects`): turns a scrape into a **client-prospect list**. Flags every business with **no website** (website-services opportunity) and scores **ERP/billing candidates** by category (food & retail, health & beauty, trades & auto, services & fitness) + review volume. Adds `has_website, needs_website, erp_match, needs_erp, priority_score, priority` columns and sorts best-first. You can also re-score any existing CSV: `python3 scripts/prospect.py results-abc.csv`.
+- 🖥️ **Local web UI** (`python3 scripts/serve.py` → http://localhost:8081): run scrapes with point-and-click config, watch jobs live, and browse every saved result in a filterable table with prospect badges — no terminal needed. Stdlib only, localhost-only.
 - ❌ **Not** a social-media scraper. It cannot touch Instagram / TikTok / YouTube.
 
 ## Why use this instead of asking an AI to "just scrape Google Maps"
@@ -55,11 +57,48 @@ curl http://localhost:8080/api/v1/jobs
 # 3a. Scrape with the script…
 ./scripts/scrape.sh "coffee shops in Austin TX" 30.2672 -97.7431 5
 
-# 3b. …or open this folder in Claude Code and say:
+# 3b. …or open the point-and-click web UI…
+python3 scripts/serve.py        # → http://localhost:8081
+
+# 3c. …or open this folder in Claude Code and say:
 #     "Scrape gyms in Miami and give me phones + websites."
 ```
 
 Full instructions: **[SETUP.md](SETUP.md)**. How Claude uses it: **[.claude/skills/google-maps-scraper/SKILL.md](.claude/skills/google-maps-scraper/SKILL.md)**.
+
+---
+
+## Client prospecting: find businesses that need a website or ERP/billing
+
+Beyond raw lead lists, the kit can **qualify each business as a sales prospect** for two offers —
+*website services* (they have no website) and *ERP/billing software* (their category + size say they
+run an operation that needs it). Enable it with `--prospects` on any scrape, or re-score any saved
+CSV later:
+
+```bash
+# Scrape + qualify in one go (sorted best-first, prospect columns added)
+python3 scripts/scrape.py "restaurants in Vellore" --city "Vellore, TN" --depth 5 --prospects
+
+# Re-score any existing results CSV (raw or trimmed)
+python3 scripts/prospect.py results-abc123.csv
+python3 scripts/prospect.py results-abc123.csv --only-prospects --json
+python3 scripts/prospect.py results.csv --erp-categories "restaurant,pharmacy,gym"   # your own list
+```
+
+Each row gets these extra columns:
+
+| Column | Meaning |
+|---|---|
+| `has_website` / `needs_website` | `yes`/`no` — empty, `-`, `n/a` count as no website |
+| `erp_match` | `strong` (specific category, e.g. restaurant, pharmacy, gym) / `weak` (generic store/shop) / `-` |
+| `needs_erp` | `yes` if the category is on the ERP/billing target list |
+| `priority_score` | 0–6, higher = better prospect |
+| `priority` | `hot` (5–6), `warm` (3–4), `cool` (1–2), `low` (0) |
+
+Scoring: **strong category +2 · weak +1 · 100+ reviews +2 · 25+ reviews +1 · no website +2.**
+
+To change which categories count as ERP candidates, edit `ERP_STRONG` / `ERP_WEAK` at the top of
+`scripts/prospect.py`, or pass `--erp-categories "term1,term2"` to override the strong list.
 
 ---
 
@@ -132,7 +171,10 @@ google-maps-scraper-kit/
 ├── .gitignore
 ├── scripts/
 │   ├── scrape.sh        ← one-shot bash scraper (single keyword)
-│   └── scrape.py        ← Python scraper: single, batch, + auto-geocoding (stdlib only)
+│   ├── scrape.py        ← Python scraper: single, batch, + auto-geocoding (stdlib only)
+│   ├── prospect.py      ← prospect qualification: scores no-website + ERP/billing leads from any CSV
+│   ├── serve.py         ← local web UI server (:8081) — run scrapes + browse results in the browser
+│   └── ui.html          ← the single-page UI served by serve.py
 ├── examples/
 │   ├── queries.example.json   ← reference job body + coordinate cheatsheet
 │   └── queries.example.txt    ← batch keyword list (one per line)
